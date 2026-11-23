@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../ReservationService.Core/ReservationService.Core.csproj" />
+    <PackageReference Include="CassandraCSharpDriver" Version="3.23.0" />
+    <EmbeddedResource Include="../../database/schema.cql" Link="schema.cql" />
+  </ItemGroup>
+</Project>

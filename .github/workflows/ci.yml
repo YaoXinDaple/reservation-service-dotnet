@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore dependencies
+        run: dotnet restore ReservationService.sln
+
+      - name: Build
+        run: dotnet build ReservationService.sln --configuration Release --no-restore
+
+      - name: Start Cassandra
+        run: docker compose up -d --wait --wait-timeout 600
+
+      - name: Run integration tests
+        run: dotnet test ReservationService.sln --configuration Release --no-build --logger "console;verbosity=normal"
+
+      - name: Run all 16 labs
+        run: dotnet run --project samples/ReservationService.Labs --configuration Release --no-build -- all
+
+      - name: Show Cassandra logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+
+      - name: Remove CI containers and volumes
+        if: always()
+        run: docker compose down --volumes

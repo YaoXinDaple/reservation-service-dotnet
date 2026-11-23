@@ -1,0 +1,49 @@
+# Optional three-node cluster for the replication demo (scripts/cluster-demo.ps1).
+# Separate from compose.yaml: no host ports, no volumes; `down` discards all data.
+# Needs about 4 GB of free Docker memory.
+# Nodes must join ONE AT A TIME: two nodes bootstrapping together can pick colliding tokens
+# ("Bootstrap Token collision") and one of them silently stays out of the ring.
+# scripts/cluster-demo.ps1 starts them one by one and checks the ring; prefer it over a plain `up`.
+name: reservation-cluster
+
+x-node: &node
+  image: cassandra:5.0.9
+  healthcheck:
+    # Healthy only when this node sees itself as Up/Normal in the ring, not merely accepting CQL.
+    test: ["CMD-SHELL", "nodetool status 2>/dev/null | grep -Eq \"^UN +$$(hostname -i) \" || exit 1"]
+    interval: 10s
+    timeout: 20s
+    retries: 40
+    start_period: 60s
+  stop_grace_period: 60s
+
+x-env: &env
+  CASSANDRA_CLUSTER_NAME: reservation-cluster
+  CASSANDRA_SEEDS: cass1
+  CASSANDRA_DC: datacenter1
+  CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+  MAX_HEAP_SIZE: 512M
+  HEAP_NEWSIZE: 128M
+
+services:
+  cass1:
+    <<: *node
+    environment:
+      <<: *env
+      CASSANDRA_RACK: rack1
+  cass2:
+    <<: *node
+    environment:
+      <<: *env
+      CASSANDRA_RACK: rack2
+    depends_on:
+      cass1:
+        condition: service_healthy
+  cass3:
+    <<: *node
+    environment:
+      <<: *env
+      CASSANDRA_RACK: rack3
+    depends_on:
+      cass2:
+        condition: service_healthy

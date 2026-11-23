@@ -1,0 +1,59 @@
+@baseUrl = http://localhost:5080
+# 创建成功后，把响应中的 confirmationNumber 粘贴到这里，再执行查询/修改/删除。
+@confirmationNumber = 00000000-0000-0000-0000-000000000000
+# 分页响应存在 nextCursor 时，把它粘贴到这里。
+@cursor = paste-nextCursor-here
+
+### 健康检查
+GET {{baseUrl}}/health
+
+### 创建预订，预期 201，Location 指向按确认号查询接口
+POST {{baseUrl}}/api/v1/reservations
+Content-Type: application/json
+
+{
+  "hotelId": "H_BEIJING",
+  "startDate": "2026-11-06",
+  "endDate": "2026-11-09",
+  "roomNumber": 101,
+  "guestId": "a2792706-3c1a-43da-a375-d4cfa471de5e"
+}
+
+### 按确认号查询
+GET {{baseUrl}}/api/v1/reservations/{{confirmationNumber}}
+
+### 查询指定酒店当天开始入住的预订
+GET {{baseUrl}}/api/v1/reservations/findByHotelAndDate?hotelId=H_BEIJING&date=2026-11-06&pageSize=2
+
+### 使用上一步返回的 nextCursor，查询条件与 pageSize 必须保持一致
+GET {{baseUrl}}/api/v1/reservations/findByHotelAndDate?hotelId=H_BEIJING&date=2026-11-06&pageSize=2&cursor={{cursor}}
+
+### 全表浏览，仅用于小数据教学，无全局排序
+GET {{baseUrl}}/api/v1/reservations?pageSize=2
+
+### 修改酒店、日期、房间。旧 H_BEIJING / 2026-11-06 下不应再有该笔记录
+PUT {{baseUrl}}/api/v1/reservations/{{confirmationNumber}}
+Content-Type: application/json
+
+{
+  "hotelId": "H_SHANGHAI",
+  "startDate": "2026-11-07",
+  "endDate": "2026-11-10",
+  "roomNumber": 202,
+  "guestId": "a2792706-3c1a-43da-a375-d4cfa471de5e"
+}
+
+### 验证旧查询位置
+GET {{baseUrl}}/api/v1/reservations/findByHotelAndDate?hotelId=H_BEIJING&date=2026-11-06
+
+### 验证新查询位置
+GET {{baseUrl}}/api/v1/reservations/findByHotelAndDate?hotelId=H_SHANGHAI&date=2026-11-07
+
+### 删除，存在时 204，再次删除 404
+DELETE {{baseUrl}}/api/v1/reservations/{{confirmationNumber}}
+
+### 验证参数错误，预期 400 Problem Details
+GET {{baseUrl}}/api/v1/reservations/findByHotelAndDate?hotelId=H_BEIJING
+
+### OpenAPI JSON
+GET {{baseUrl}}/openapi/v1.json
