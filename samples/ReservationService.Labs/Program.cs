@@ -3,13 +3,15 @@ using ReservationService.Cassandra;
 using ReservationService.Core;
 using ReservationService.Labs;
 
-var command = args.FirstOrDefault() ?? "all";
+// --pause keeps a lab's data until Enter is pressed, so it can be queried from another terminal.
+var pause = args.Contains("--pause");
+var command = args.FirstOrDefault(arg => !arg.StartsWith("--")) ?? "all";
 var commands = new[] { "prepared", "paging", "ttl", "lwt", "batch", "schema-exists",
     "anti-pattern", "sai", "tracing", "tombstones", "consistency",
     "token", "overwrite", "lww", "static-counter", "report-diff" };
 if (command != "all" && !commands.Contains(command) && command is not ("if-not-exists" or "if-exists"))
 {
-    Console.Error.WriteLine("Usage: dotnet run --project samples/ReservationService.Labs -- [all|prepared|paging|ttl|lwt|if-not-exists|if-exists|batch|schema-exists|anti-pattern|sai|tracing|tombstones|consistency|token|overwrite|lww|static-counter|report-diff]");
+    Console.Error.WriteLine("Usage: dotnet run --project samples/ReservationService.Labs -- [all|prepared|paging|ttl|lwt|if-not-exists|if-exists|batch|schema-exists|anti-pattern|sai|tracing|tombstones|consistency|token|overwrite|lww|static-counter|report-diff] [--pause]");
     return 1;
 }
 
@@ -28,8 +30,9 @@ await session.ExecuteAsync(new SimpleStatement("CREATE TABLE IF NOT EXISTS lab_e
 var insert = await session.PrepareAsync("INSERT INTO lab_items (bucket, id, value) VALUES (?, ?, ?)");
 var select = await session.PrepareAsync("SELECT id, value FROM lab_items WHERE bucket = ?");
 var conditionalReservations = await ConditionalReservationExamples.CreateAsync(session);
-var queryLabs = new QueryLabs(session, options.LocalDatacenter);
-var modelingLabs = new ModelingLabs(session);
+var live = new LiveQuery(pause);
+var queryLabs = new QueryLabs(session, options.LocalDatacenter, live);
+var modelingLabs = new ModelingLabs(session, live);
 var reportDiffLab = new ReportDiffLab(session);
 
 foreach (var lab in command == "all" ? commands : [command])

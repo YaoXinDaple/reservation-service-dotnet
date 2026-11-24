@@ -4,7 +4,7 @@ namespace ReservationService.Labs;
 
 // Labs that explain what Cassandra does with a query: which queries it rejects,
 // how SAI changes that, what tracing reveals, what deletes cost, and how RF limits consistency.
-public sealed class QueryLabs(ISession session, string localDatacenter)
+public sealed class QueryLabs(ISession session, string localDatacenter, LiveQuery live)
 {
     private static readonly LocalDate Arrival = new(2026, 11, 6);
 
@@ -52,15 +52,15 @@ public sealed class QueryLabs(ISession session, string localDatacenter)
                 $"SELECT {columns} FROM {table} WHERE hotel_id = ? AND start_date = ? AND confirmation_number = ?",
                 [hotel, Arrival, firstConfirmation], expectRows: null);
             await RunQuery(4, "查询 2 加上 ALLOW FILTERING",
-                $"SELECT {columns} FROM {table} WHERE guest_id = ? ALLOW FILTERING", [guest], expectRows: 1);
-            Console.WriteLine("        能查到，但 Cassandra 要扫描所有分区再逐行过滤，代价见 tracing 实验。");
+                $"SELECT {columns} FROM {table} WHERE guest_id = ? ALLOW FILTERING", [guest], expectRows: 1,
+                note: "能查到，但 Cassandra 要扫描所有分区再逐行过滤，代价见 tracing 实验。");
             await RunQuery(5, "给出完整分区键",
-                $"SELECT {columns} FROM {table} WHERE hotel_id = ? AND start_date = ?", [hotel, Arrival], expectRows: 2);
-            Console.WriteLine("        直接定位到一个分区，返回该分区内按聚簇列排好序的 2 行。");
+                $"SELECT {columns} FROM {table} WHERE hotel_id = ? AND start_date = ?", [hotel, Arrival], expectRows: 2,
+                note: "直接定位到一个分区，返回该分区内按聚簇列排好序的 2 行。");
             await RunQuery(6, "完整分区键 + 按顺序限定聚簇列",
                 $"SELECT {columns} FROM {table} WHERE hotel_id = ? AND start_date = ? AND room_number = ? AND confirmation_number = ?",
-                [hotel, Arrival, (short)101, firstConfirmation], expectRows: 1);
-            Console.WriteLine("        和查询 3 条件相同，只是补上了 room_number，就能精确定位到一行。");
+                [hotel, Arrival, (short)101, firstConfirmation], expectRows: 1,
+                note: "和查询 3 条件相同，只是补上了 room_number，就能精确定位到一行。");
         }
         finally
         {
@@ -71,7 +71,7 @@ public sealed class QueryLabs(ISession session, string localDatacenter)
 
     // Prints the CQL with values inlined (for display only; execution still binds parameters),
     // then either the server's rejection or the returned rows.
-    private async Task RunQuery(int number, string title, string cql, object[] values, int? expectRows)
+    private async Task RunQuery(int number, string title, string cql, object[] values, int? expectRows, string? note = null)
     {
         Console.WriteLine($"\n[查询 {number}] {title}");
         Console.WriteLine($"  CQL：{Inline(cql, values)};");
@@ -85,6 +85,7 @@ public sealed class QueryLabs(ISession session, string localDatacenter)
             Require(expectRows is null, $"Query {number} should have succeeded: {ex.Message}");
             Console.WriteLine("  结果：被拒绝（InvalidQueryException）");
             Console.WriteLine($"        {ex.Message}");
+            ShowInCqlsh();
             return;
         }
         Require(expectRows is not null, $"Query {number} should have been rejected.");
@@ -94,6 +95,17 @@ public sealed class QueryLabs(ISession session, string localDatacenter)
             Console.WriteLine($"        start_date={row.GetValue<LocalDate>("start_date")}  room_number={row.GetValue<short>("room_number")}  " +
                 $"confirmation_number={Short(row.GetValue<string>("confirmation_number"))}  guest_id={Short(row.GetValue<Guid>("guest_id"))}");
         Require(list.Count == expectRows, $"Query {number} should return {expectRows} rows but returned {list.Count}.");
+        if (note is not null) Console.WriteLine($"        {note}");
+        ShowInCqlsh();
+
+        // cqlsh has no session keyspace, so qualify the table.
+        void ShowInCqlsh()
+        {
+            if (!live.Enabled) return;
+            Console.WriteLine();
+            live.Print(Inline(cql, values).Replace("FROM ", $"FROM {session.Keyspace}.") + ";", "执行同一条语句，看数据库自己的返回");
+            live.Pause();
+        }
     }
 
     private static string Inline(string cql, object[] values)
