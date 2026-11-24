@@ -60,6 +60,8 @@ dotnet run --project samples/ReservationService.Labs -- all
 
 GitHub Actions 会在每次推送和 Pull Request 时构建项目，使用真实 Cassandra 运行集成测试与全部实验。配置见 [CI 工作流](.github/workflows/ci.yml)。
 
+`NuGet.Config` 指定 nuget.org 为漏洞审计来源，包下载仍使用本机配置的源。还原依赖时会审计直接和间接依赖，审计警告按错误处理。`Microsoft.OpenApi` 显式引用修复版 `2.7.5`，用于修复 [GHSA-v5pm-xwqc-g5wc](https://github.com/advisories/GHSA-v5pm-xwqc-g5wc)。
+
 ## 技术分享现场演示
 
 演示前做一次准备和彩排，演示过程中每讲到一节，再现场运行对应的实验。实验只需要 Cassandra，不需要 API；`./scripts/start.ps1` 会在前台运行 API 并占住终端，只在需要演示 Swagger 或 HTTP 接口时使用。
